@@ -47,6 +47,10 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/q3rf-termosztat.apk"
+      - name: Engedelyek ellenorzese
+        run: |
+          AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2"
+          "$AAPT2" dump xmltree --file AndroidManifest.xml "$GITHUB_WORKSPACE/q3rf-termosztat.apk" | grep -A3 "uses-permission" | grep -E "name|usesPermissionFlags|maxSdkVersion"
       - uses: actions/upload-artifact@v4
         with:
           name: q3rf-termosztat-apk

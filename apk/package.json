@@ -1,6 +1,6 @@
 {
   "name": "q3rf-app",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Q3RF termosztát – Android app (Capacitor)",
   "dependencies": {
