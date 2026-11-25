@@ -9,6 +9,12 @@
 
 UART 38400 8N1. Rajz: `BEKOTES_jumper_blokk.svg`.
 
+| A panel hátoldala (tájolás) | TP1 (WAKE) helye – piros pont |
+|---|---|
+| ![Panel hátoldal](kepek/panel_hatlap.jpg) | ![TP1](kepek/tp1_wake.jpg) |
+
+A bal oldali képen fent középen az RL78 látszik, mellette jobbra a J1 (G/T/R/V), balra középen a HEAT/COOL jumper-blokk. A jobb oldali képen a **piros pont a TP1** (pin 21, P30): a J1 „G” tüske fölött, az RL78 alsó sarka mellett. Ide kell forrasztani az ESP32 GPIO4 (WAKE) vezetékét.
+
 - A középső és az alsó sorból **vedd ki a jumpert**, és a sor jobb tüskéjére forraszd a vezetéket. A bal oszlopra (pin 47) ne forrassz.
 - Az ESP32 a saját USB-tápjáról megy, az RL78 az elemről. Csak a GND közös.
 - A TX és a WAKE kimenetet az ESP32 firmware open-drain-re állítja, így nincs visszatáplálás az RL78 felé. Más ESP firmware-rel ez nem garantált.

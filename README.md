@@ -10,7 +10,7 @@ Computherm Q3RF termosztát (RL78 R7F0C001G2) saját firmware-rel. Opcionálisan
 | `esp32/` | `q3rf_esp32_v0.3.0_merged.bin` (0x0-ra), `bin/` külön fájlok, forrás |
 | `app/` | a telefonos app forrása (webapp) |
 | `apk/` | Android-csomagolás (Capacitor). Az APK-t a GitHub Actions fordítja, és a **Releases** oldalra teszi |
-| `BEKOTES.md` | RL78 ↔ ESP32 bekötés |
+| `BEKOTES.md` | RL78 ↔ ESP32 bekötés, fotókkal (`kepek/`: panel tájolása, TP1 forrasztási pont) |
 
 Fordítás: RL78 – `sh build.sh lcd_temp_main.c q3rf_rl78` (a `BIN=` sor legyen a saját toolchain-útvonalad). ESP32 – PlatformIO: `pio run -e esp32dev`.
 
