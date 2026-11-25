@@ -8,7 +8,8 @@ Computherm Q3RF termosztát (RL78 R7F0C001G2) saját firmware-rel. Opcionálisan
 |---|---|
 | `rl78/` | `q3rf_rl78_v1.0.mot` termosztát firmware + forrás. Programozás: `PROGRAMOZAS_CH341A.md` |
 | `esp32/` | `q3rf_esp32_v0.3.0_merged.bin` (0x0-ra), `bin/` külön fájlok, forrás |
-| `app/` | telefonos webapp (PWA), HTTPS-ről kell kiszolgálni (pl. GitHub Pages) |
+| `app/` | a telefonos app forrása (webapp) |
+| `apk/` | Android-csomagolás (Capacitor). Az APK-t a GitHub Actions fordítja, és a **Releases** oldalra teszi |
 | `BEKOTES.md` | RL78 ↔ ESP32 bekötés |
 
 Fordítás: RL78 – `sh build.sh lcd_temp_main.c q3rf_rl78` (a `BIN=` sor legyen a saját toolchain-útvonalad). ESP32 – PlatformIO: `pio run -e esp32dev`.
@@ -31,7 +32,9 @@ A termosztát ESP32 nélkül is teljes értékűen működik.
 - Feltöltés: `esptool.py --chip esp32 write_flash 0x0 q3rf_esp32_v0.3.0_merged.bin`. A korábbi beállítások megmaradnak.
 
 ## App
-Mutatja a hőmérsékletet, a beállított értéket és a fűtés állapotát. Közelről Bluetooth-on, távolról HiveMQ-n keresztül csatlakozik. Bluetooth-on lehet beállítani a WiFi-t, a szervert (HiveMQ vagy Home Assistant) és a PIN-t. Androidon Chrome kell (iOS nem támogatja a Web Bluetooth-t).
+Mutatja a hőmérsékletet, a beállított értéket és a fűtés állapotát. Közelről Bluetooth-on, távolról HiveMQ-n keresztül csatlakozik. Bluetooth-on lehet beállítani a WiFi-t, a szervert (HiveMQ vagy Home Assistant) és a PIN-t. Telepítés: a **Releases** oldalról töltsd le a `q3rf-termosztat.apk` fájlt, és nyisd meg a telefonon (engedélyezni kell az ismeretlen forrásból való telepítést). Első csatlakozáskor a telefon kéri a Bluetooth PIN-t.
+
+Új APK készítése: `git tag v0.3.1 && git push --tags`, vagy az Actions fülön az „APK” munkafolyamat kézi indítása.
 
 ## Home Assistant beüzemelése
 1. HA-ban telepítsd a **Mosquitto broker** bővítményt, és add hozzá az **MQTT** integrációt.

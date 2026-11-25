@@ -1,0 +1,6 @@
+{
+  "appId": "hu.q3rf.thermostat",
+  "appName": "Q3RF termosztát",
+  "webDir": "www",
+  "android": { "allowMixedContent": false }
+}

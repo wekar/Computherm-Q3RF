@@ -1,0 +1,62 @@
+# Android APK forditasa az app/ webappbol (Capacitor), es feltoltese GitHub Release-be.
+# Inditas: "v*" tag push-ra (pl. v0.3.0), vagy kezzel az Actions fulon.
+name: APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apk/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Web reszek
+        run: |
+          npm ci
+          npm run build-www
+          npx cap sync android
+      - name: Alairo kulcs
+        env:
+          KS_B64: ${{ secrets.Q3RF_KEYSTORE_B64 }}
+        run: |
+          test -n "$KS_B64" || { echo "Hianyzik a Q3RF_KEYSTORE_B64 secret"; exit 1; }
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/q3rf.jks"
+          echo "Q3RF_KEYSTORE=$RUNNER_TEMP/q3rf.jks" >> "$GITHUB_ENV"
+      - name: Forditas
+        env:
+          Q3RF_KEYSTORE_PASS: ${{ secrets.Q3RF_KEYSTORE_PASS }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/q3rf-termosztat.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: q3rf-termosztat-apk
+          path: q3rf-termosztat.apk
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          gh release create "$GITHUB_REF_NAME" q3rf-termosztat.apk esp32/q3rf_esp32_*_merged.bin rl78/q3rf_rl78_*.mot \
+            --title "Q3RF $GITHUB_REF_NAME" --notes "Android app: q3rf-termosztat.apk. ESP32 és RL78 firmware mellékelve." \
+            || gh release upload "$GITHUB_REF_NAME" q3rf-termosztat.apk --clobber

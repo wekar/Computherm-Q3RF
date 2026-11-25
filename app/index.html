@@ -177,7 +177,7 @@ const $ = id => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 let state = null, stateAt = 0, devOnline = null;
-let ble = { dev: null, st: null, cmd: null, q: Promise.resolve() };
+let ble = { dev: null, st: null, cmd: null, id: null, q: Promise.resolve() };
 let mq = null;
 let spPending = null, spTimer = null;
 
@@ -199,7 +199,7 @@ function render() {
   h.textContent = s.heat ? "Fűtés: BE" : "Fűtés: KI";
   h.classList.toggle("on", !!s.heat);
   $("devName").textContent = s.dev || store.get("dev");
-  const bleOn = !!(ble.dev && ble.dev.gatt.connected);
+  const bleOn = bleIsOn();
   $("bBle").className = "badge" + (bleOn ? " on" : "");
   $("bNet").className = "badge" + (mq && mq.connected ? (devOnline === false ? " warn" : " on") : "");
   $("bNet").textContent = mq && mq.connected && devOnline === false ? "Internet (termosztát offline)" : "Internet";
@@ -246,39 +246,69 @@ function applyState(s) {
   render();
 }
 
-/* ---- Bluetooth ---- */
+/* ---- Bluetooth ----
+   Böngészőben Web Bluetooth (Chrome), az Android appban (APK) a natív
+   Bluetooth a Capacitor BLE-pluginnal – mindkettő ugyanezen a felületen. */
+const NATIVE = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
+const BleClient = NATIVE && window.capacitorCommunityBluetoothLe ? capacitorCommunityBluetoothLe.BleClient : null;
 function gatt(fn) {                      /* GATT-műveletek sorba rendezése */
   const p = ble.q.then(fn, fn);
   ble.q = p.catch(() => {});
   return p;
 }
+function bleIsOn() { return NATIVE ? !!ble.id : !!(ble.dev && ble.dev.gatt.connected && ble.cmd); }
+function bleLost() { ble.st = ble.cmd = null; ble.id = null; msg("Bluetooth bontva"); render(); }
 async function bleReadStatus() {
-  if (!ble.st) return;
-  const v = await gatt(() => ble.st.readValue());
+  let v;
+  if (NATIVE) { if (!ble.id) return; v = await gatt(() => BleClient.read(ble.id, SVC, ST)); }
+  else { if (!ble.st) return; v = await gatt(() => ble.st.readValue()); }
   try { applyState(JSON.parse(dec.decode(v))); } catch (e) { console.warn("rossz JSON", e); }
 }
+async function bleWrite(cmd) {
+  const data = enc.encode(cmd);
+  if (NATIVE) return gatt(() => BleClient.write(ble.id, SVC, CMD, new DataView(data.buffer)));
+  return gatt(() => ble.cmd.writeValueWithResponse(data));
+}
+async function bleConnectNative() {
+  await BleClient.initialize({ androidNeverForLocation: true });
+  const d = await BleClient.requestDevice({ services: [SVC] });
+  msg("Csatlakozás…");
+  await BleClient.connect(d.deviceId, () => bleLost());
+  ble.id = d.deviceId;
+  try {                                  /* PIN-es párosítás (első alkalommal kéri a PIN-t) */
+    if (!(await BleClient.isBonded(d.deviceId))) await BleClient.createBond(d.deviceId, { timeout: 60000 });
+  } catch (e) { console.warn("bond", e); }
+  await bleReadStatus();
+  await BleClient.startNotifications(d.deviceId, SVC, ST, () => { bleReadStatus().catch(() => {}); });
+}
+async function bleConnectWeb() {
+  if (!navigator.bluetooth) throw new Error("ez a böngésző nem támogatja (Androidon Chrome kell)");
+  const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }] });
+  ble.dev = dev;
+  dev.addEventListener("gattserverdisconnected", bleLost);
+  msg("Csatlakozás…");
+  const srv = await dev.gatt.connect();
+  const svc = await srv.getPrimaryService(SVC);
+  ble.st = await svc.getCharacteristic(ST);
+  ble.cmd = await svc.getCharacteristic(CMD);
+  await bleReadStatus();                 /* első olvasáskor kéri a rendszer a PIN-t */
+  await gatt(() => ble.st.startNotifications());
+  ble.st.addEventListener("characteristicvaluechanged", () => { bleReadStatus().catch(() => {}); });
+}
 async function bleConnect() {
-  if (!navigator.bluetooth) { msg("Ez a böngésző nem támogatja a Bluetooth-t (Androidon Chrome kell)."); return; }
   try {
-    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }] });
-    ble.dev = dev;
-    dev.addEventListener("gattserverdisconnected", () => { ble.st = ble.cmd = null; msg("Bluetooth bontva"); render(); });
-    msg("Csatlakozás…");
-    const srv = await dev.gatt.connect();
-    const svc = await srv.getPrimaryService(SVC);
-    ble.st = await svc.getCharacteristic(ST);
-    ble.cmd = await svc.getCharacteristic(CMD);
-    await bleReadStatus();               /* első olvasáskor kéri a rendszer a PIN-t */
-    await gatt(() => ble.st.startNotifications());
-    ble.st.addEventListener("characteristicvaluechanged", () => { bleReadStatus().catch(() => {}); });
+    await (NATIVE ? bleConnectNative() : bleConnectWeb());
     msg("Bluetooth kapcsolat rendben");
   } catch (e) {
+    if (NATIVE && ble.id) { BleClient.disconnect(ble.id).catch(() => {}); ble.id = null; }
     msg("Bluetooth hiba: " + (e.message || e));
   }
   render();
 }
 $("bleBtn").onclick = () => {
-  if (ble.dev && ble.dev.gatt.connected) ble.dev.gatt.disconnect(); else bleConnect();
+  if (!bleIsOn()) { bleConnect(); return; }
+  if (NATIVE) { const id = ble.id; BleClient.disconnect(id).catch(() => {}); bleLost(); }
+  else ble.dev.gatt.disconnect();
 };
 
 
@@ -302,7 +332,7 @@ function mqttStart() {
   mq.on("message", (topic, payload) => {
     const txt = payload.toString();
     if (topic.endsWith("/online")) { devOnline = txt === "1"; render(); return; }
-    if (ble.dev && ble.dev.gatt.connected) return;   /* Bluetooth-on frissebb adat jön */
+    if (bleIsOn()) return;   /* Bluetooth-on frissebb adat jön */
     try { applyState(JSON.parse(txt)); } catch {}
   });
 }
@@ -317,8 +347,8 @@ $("aSave").onclick = () => {
 
 /* ---- parancsküldés ---- */
 async function send(cmd, bleOnly = false) {
-  if (ble.dev && ble.dev.gatt.connected && ble.cmd) {
-    await gatt(() => ble.cmd.writeValueWithResponse(enc.encode(cmd)));
+  if (bleIsOn()) {
+    await bleWrite(cmd);
     return true;
   }
   if (!bleOnly && mq && mq.connected) {
@@ -395,7 +425,7 @@ $("pinSend").onclick = async () => {
 /* ---- indulás ---- */
 render();
 mqttStart();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if (!NATIVE && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>

@@ -1,2 +1,4 @@
 back0_1.jpeg
 *.bak*
+apk/node_modules/
+apk/www/
