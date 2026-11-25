@@ -14,6 +14,11 @@ Computherm Q3RF termosztát (RL78 R7F0C001G2) saját firmware-rel. Opcionálisan
 
 Fordítás: RL78 – `sh build.sh lcd_temp_main.c q3rf_rl78` (a `BIN=` sor legyen a saját toolchain-útvonalad). ESP32 – PlatformIO: `pio run -e esp32dev`.
 
+## A panel tájolása
+A leírásokban az irányok (fent, lent, bal, jobb) erre a nézetre vonatkoznak: a panel hátoldala, fent középen az RL78, mellette jobbra a J1 (G/T/R/V) programozó-csatlakozó, balra középen a HEAT/COOL jumper-blokk.
+
+<img src="kepek/panel_hatlap.jpg" alt="A Q3RF panel hátoldala" width="420">
+
 ## RL78 (termosztát)
 A termosztát ESP32 nélkül is teljes értékűen működik.
 - Hőmérsékletmérés 10 s-onként. Beállítás 18–28 °C között, 0,5 °C-os lépésben (elemcsere után 21,0 °C). Fűtés ±0,2 °C hiszterézissel.
