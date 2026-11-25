@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Q3RF termosztát</title>
+<meta name="theme-color" content="#c44a24">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f6f3f0; --card:#ffffff; --ink:#1f1b18; --mut:#6f6760; --line:#e4ddd6;
+  --acc:#c44a24; --acc-ink:#ffffff; --ok:#2f7d4f; --warn:#b26b00; --off:#8a837d;
+  --heat:#d9481e; --heat-bg:#fde7dd;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#151311; --card:#211e1b; --ink:#f1ece7; --mut:#a59c94; --line:#36312c;
+         --acc:#e0663e; --acc-ink:#1a0d07; --ok:#5fbf86; --warn:#e3a33d; --off:#7d756e;
+         --heat:#ff7a4d; --heat-bg:#3a1f15; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding:max(12px,env(safe-area-inset-top)) 16px 32px}
+main{max-width:520px;margin:0 auto}
+h1{font-size:18px;margin:4px 0 10px;display:flex;align-items:center;gap:8px}
+h1 small{font-weight:400;color:var(--mut);font-size:13px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.badge{font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
+.badge.on{color:var(--ok);border-color:var(--ok)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px}
+.temp{font-size:64px;font-weight:300;letter-spacing:-2px;line-height:1;text-align:center;margin:6px 0}
+.temp small{font-size:24px;letter-spacing:0;color:var(--mut)}
+.sub{text-align:center;color:var(--mut);font-size:13px}
+.heat{display:block;width:max-content;margin:12px auto 0;padding:5px 14px;border-radius:99px;font-weight:600;font-size:14px;
+  background:var(--line);color:var(--off)}
+.heat.on{background:var(--heat-bg);color:var(--heat)}
+.sp{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:6px}
+.sp .val{font-size:34px;min-width:110px;text-align:center;font-variant-numeric:tabular-nums}
+.sp .val.pending{color:var(--warn)}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--acc);color:var(--acc-ink);font-weight:600;cursor:pointer}
+button.round{width:56px;height:56px;border-radius:50%;font-size:28px;padding:0;line-height:56px}
+button.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>button{flex:1}
+.msg{min-height:20px;text-align:center;color:var(--mut);font-size:14px;margin-top:10px}
+details{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:10px}
+summary{padding:14px 18px;cursor:pointer;font-weight:600}
+details>div{padding:0 18px 16px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.hint{font-size:13px;color:var(--mut);margin:8px 0 0}
+.seg{display:flex;gap:6px;margin-top:4px}
+.seg label{flex:1;margin:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--ink);font-size:14px;cursor:pointer}
+.seg label:has(input:checked){border-color:var(--acc);color:var(--acc);font-weight:600}
+.seg input{width:auto;margin:0}
+.info{font-size:12px;color:var(--mut);text-align:center;margin-top:16px;word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+  <h1>Termosztát <small id="devName"></small></h1>
+  <div class="badges">
+    <span class="badge" id="bBle">Bluetooth</span>
+    <span class="badge" id="bNet">Internet</span>
+    <span class="badge" id="bDev">Termosztát</span>
+  </div>
+
+  <section class="card">
+    <div class="sub">Szobahőmérséklet</div>
+    <div class="temp"><span id="temp">--.-</span><small> °C</small></div>
+    <div class="sub" id="age">nincs adat</div>
+    <span class="heat" id="heat">Fűtés: –</span>
+  </section>
+
+  <section class="card">
+    <div class="sub">Beállított hőmérséklet</div>
+    <div class="sp">
+      <button class="round" id="spDn" aria-label="Csökkentés">−</button>
+      <div class="val" id="sp">--.-</div>
+      <button class="round" id="spUp" aria-label="Növelés">+</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <div class="row" style="margin-bottom:12px">
+    <button id="bleBtn">Csatlakozás Bluetooth-on</button>
+  </div>
+
+  <details>
+    <summary>Távoli elérés (HiveMQ) – ezen a telefonon</summary>
+    <div>
+      <label>Szerver (HiveMQ Cloud cluster URL)</label>
+      <input id="aHost" placeholder="xxxxxxxx.s1.eu.hivemq.cloud" autocomplete="off">
+      <label>WebSocket port</label>
+      <input id="aPort" inputmode="numeric" placeholder="8884">
+      <label>Felhasználó (az APP saját HiveMQ-felhasználója)</label>
+      <input id="aUser" autocomplete="off">
+      <label>Jelszó</label>
+      <input id="aPass" type="password" autocomplete="off">
+      <label>Eszköz azonosító</label>
+      <input id="aDev" placeholder="q3rf-XXXXXX (Bluetooth-csatlakozáskor magától kitöltődik)" autocomplete="off">
+      <div class="row" style="margin-top:12px"><button id="aSave">Mentés és csatlakozás</button></div>
+      <p class="hint">Ezek az adatok csak ezen a telefonon tárolódnak.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Termosztát WiFi beállítása (Bluetooth kell)</summary>
+    <div>
+      <label>WiFi hálózat neve (SSID)</label>
+      <input id="wSsid" autocomplete="off">
+      <label>WiFi jelszó</label>
+      <input id="wPass" type="password" autocomplete="off">
+      <div class="row" style="margin-top:12px"><button id="wSend" class="bleOnly">Küldés a termosztátnak</button></div>
+    </div>
+  </details>
+
+  <details id="brokerBox">
+    <summary>Termosztát szervere: <span id="brokerNow">?</span> (Bluetooth kell)</summary>
+    <div>
+      <div class="seg" role="radiogroup">
+        <label><input type="radio" name="broker" value="hivemq" checked> HiveMQ Cloud</label>
+        <label><input type="radio" name="broker" value="ha"> Home Assistant</label>
+      </div>
+      <p class="hint" id="brokerHint"></p>
+      <div id="grpHivemq">
+      <label>Szerver</label>
+      <input id="mHost" placeholder="xxxxxxxx.s1.eu.hivemq.cloud" autocomplete="off">
+      <label>TLS port</label>
+      <input id="mPort" inputmode="numeric" placeholder="8883">
+      <label>Felhasználó (a TERMOSZTÁT saját HiveMQ-felhasználója)</label>
+      <input id="mUser" autocomplete="off">
+      <label>Jelszó</label>
+      <input id="mPass" type="password" autocomplete="off">
+      </div>
+      <div id="grpHa" hidden>
+      <label>Home Assistant (Mosquitto) címe</label>
+      <input id="hHost" placeholder="192.168.1.10 vagy homeassistant.local" autocomplete="off">
+      <label>Port</label>
+      <input id="hPort" inputmode="numeric" placeholder="1883">
+      <label>MQTT felhasználó (üresen hagyható)</label>
+      <input id="hUser" autocomplete="off">
+      <label>Jelszó</label>
+      <input id="hPass" type="password" autocomplete="off">
+      </div>
+      <div class="row" style="margin-top:12px"><button id="mSend" class="bleOnly">Mentés és bekapcsolás</button></div>
+      <p class="hint">A termosztát mindkét beállítást megjegyzi, de egyszerre csak az egyikhez kapcsolódik.
+        A jelszót csak akkor kell újra beírni, ha a szerver adatai változnak.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Párosítás és biztonság</summary>
+    <div>
+      <p class="hint">Párosítás a kazánvevővel: előbb a vevőn nyomd meg az M/A gombot, amíg zölden villog.</p>
+      <div class="row" style="margin-top:10px"><button id="pairBtn" class="ghost">Párosítás a vevővel</button></div>
+      <label>Új Bluetooth PIN (6 számjegy)</label>
+      <input id="pinNew" inputmode="numeric" maxlength="6" autocomplete="off">
+      <div class="row" style="margin-top:12px"><button id="pinSend" class="ghost bleOnly">PIN módosítása</button></div>
+      <p class="hint">PIN-módosítás után a telefont a rendszer Bluetooth-beállításaiban el kell felejteni, és újra kell párosítani.</p>
+    </div>
+  </details>
+
+  <div class="info" id="info"></div>
+</main>
+
+<script src="mqtt.min.js"></script>
+<script>
+"use strict";
+const SVC = "7a1c0000-5133-4252-8f1a-9b2e51335246";
+const ST  = "7a1c0001-5133-4252-8f1a-9b2e51335246";
+const CMD = "7a1c0002-5133-4252-8f1a-9b2e51335246";
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+
+let state = null, stateAt = 0, devOnline = null;
+let ble = { dev: null, st: null, cmd: null, q: Promise.resolve() };
+let mq = null;
+let spPending = null, spTimer = null;
+
+/* ---- tárolás ---- */
+const store = {
+  get(k, d = "") { try { return localStorage.getItem("q3rf." + k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("q3rf." + k, v); } catch {} }
+};
+
+/* ---- megjelenítés ---- */
+function fmt(v) { return (v === null || v === undefined) ? "--.-" : Number(v).toFixed(1); }
+function msg(t) { $("msg").textContent = t || ""; }
+function render() {
+  const s = state || {};
+  $("temp").textContent = fmt(s.t);
+  $("sp").textContent = fmt(spPending ?? s.sp);
+  $("sp").classList.toggle("pending", spPending !== null);
+  const h = $("heat");
+  h.textContent = s.heat ? "Fűtés: BE" : "Fűtés: KI";
+  h.classList.toggle("on", !!s.heat);
+  $("devName").textContent = s.dev || store.get("dev");
+  const bleOn = !!(ble.dev && ble.dev.gatt.connected);
+  $("bBle").className = "badge" + (bleOn ? " on" : "");
+  $("bNet").className = "badge" + (mq && mq.connected ? (devOnline === false ? " warn" : " on") : "");
+  $("bNet").textContent = mq && mq.connected && devOnline === false ? "Internet (termosztát offline)" : "Internet";
+  const link = state && state.link;
+  $("bDev").className = "badge" + (state ? (link ? " on" : " warn") : "");
+  $("bleBtn").textContent = bleOn ? "Bluetooth bontása" : "Csatlakozás Bluetooth-on";
+  document.querySelectorAll(".bleOnly").forEach(b => b.disabled = !bleOn);
+  const canCmd = bleOn || (mq && mq.connected);
+  $("spUp").disabled = $("spDn").disabled = $("pairBtn").disabled = !canCmd || !state || state.sp === null;
+  if (state) {
+    const parts = [];
+    if (s.fw) parts.push("fw " + s.fw);
+    if (s.id) parts.push("RF-ID " + s.id);
+    if (s.ip) parts.push("IP " + s.ip);
+    if (s.rssi) parts.push("WiFi " + s.rssi + " dBm");
+    if (s.wifi === 0) parts.push("WiFi nincs");
+    if (s.mqtt === 0 && s.wifi) parts.push("MQTT nincs");
+    $("info").textContent = parts.join(" · ");
+  }
+}
+setInterval(() => {
+  if (!stateAt) return;
+  const sec = Math.round((Date.now() - stateAt) / 1000);
+  $("age").textContent = sec < 5 ? "most frissült" : sec < 120 ? sec + " másodperce" : Math.round(sec / 60) + " perce";
+}, 1000);
+
+function applyState(s) {
+  state = s;
+  stateAt = Date.now();
+  if (s.dev && !$("aDev").value) { $("aDev").value = s.dev; store.set("dev", s.dev); }
+  if (spPending !== null && !spTimer && Number(s.sp) === spPending) spPending = null;
+  if (s.msg) msg(s.msg);
+  if (s.ssid !== undefined && !$("wSsid").value) $("wSsid").value = s.ssid;
+  if (s.mhost !== undefined && !$("mHost").value) {
+    $("mHost").value = s.mhost; $("mPort").value = s.mport || ""; $("mUser").value = s.muser || "";
+  }
+  if (s.hhost !== undefined && !$("hHost").value) {
+    $("hHost").value = s.hhost; $("hPort").value = s.hport || ""; $("hUser").value = s.huser || "";
+  }
+  if (s.broker) {
+    $("brokerNow").textContent = s.broker === "ha" ? "Home Assistant" : "HiveMQ";
+    if (!brokerTouched) { document.querySelector(`input[name=broker][value=${s.broker}]`).checked = true; brokerUi(); }
+  }
+  render();
+}
+
+/* ---- Bluetooth ---- */
+function gatt(fn) {                      /* GATT-műveletek sorba rendezése */
+  const p = ble.q.then(fn, fn);
+  ble.q = p.catch(() => {});
+  return p;
+}
+async function bleReadStatus() {
+  if (!ble.st) return;
+  const v = await gatt(() => ble.st.readValue());
+  try { applyState(JSON.parse(dec.decode(v))); } catch (e) { console.warn("rossz JSON", e); }
+}
+async function bleConnect() {
+  if (!navigator.bluetooth) { msg("Ez a böngésző nem támogatja a Bluetooth-t (Androidon Chrome kell)."); return; }
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }] });
+    ble.dev = dev;
+    dev.addEventListener("gattserverdisconnected", () => { ble.st = ble.cmd = null; msg("Bluetooth bontva"); render(); });
+    msg("Csatlakozás…");
+    const srv = await dev.gatt.connect();
+    const svc = await srv.getPrimaryService(SVC);
+    ble.st = await svc.getCharacteristic(ST);
+    ble.cmd = await svc.getCharacteristic(CMD);
+    await bleReadStatus();               /* első olvasáskor kéri a rendszer a PIN-t */
+    await gatt(() => ble.st.startNotifications());
+    ble.st.addEventListener("characteristicvaluechanged", () => { bleReadStatus().catch(() => {}); });
+    msg("Bluetooth kapcsolat rendben");
+  } catch (e) {
+    msg("Bluetooth hiba: " + (e.message || e));
+  }
+  render();
+}
+$("bleBtn").onclick = () => {
+  if (ble.dev && ble.dev.gatt.connected) ble.dev.gatt.disconnect(); else bleConnect();
+};
+
+
+/* ---- MQTT (távoli) ---- */
+function mqttCfg() {
+  return { host: store.get("aHost"), port: store.get("aPort", "8884"), user: store.get("aUser"),
+           pass: store.get("aPass"), dev: store.get("dev") };
+}
+function mqttStart() {
+  if (mq) { mq.end(true); mq = null; }
+  const c = mqttCfg();
+  if (!c.host || !c.dev) { render(); return; }
+  const base = "q3rf/" + c.dev;
+  mq = mqtt.connect(`wss://${c.host}:${c.port || 8884}/mqtt`, {
+    username: c.user, password: c.pass, clientId: "q3rf-app-" + Math.random().toString(16).slice(2, 10),
+    reconnectPeriod: 5000, connectTimeout: 10000, clean: true
+  });
+  mq.on("connect", () => { mq.subscribe([base + "/state", base + "/online"], { qos: 1 }); render(); });
+  mq.on("close", render);
+  mq.on("error", e => msg("Internet: " + (e.message || e)));
+  mq.on("message", (topic, payload) => {
+    const txt = payload.toString();
+    if (topic.endsWith("/online")) { devOnline = txt === "1"; render(); return; }
+    if (ble.dev && ble.dev.gatt.connected) return;   /* Bluetooth-on frissebb adat jön */
+    try { applyState(JSON.parse(txt)); } catch {}
+  });
+}
+for (const k of ["aHost", "aPort", "aUser", "aPass"]) $(k).value = store.get(k);
+$("aDev").value = store.get("dev");
+$("aSave").onclick = () => {
+  for (const k of ["aHost", "aPort", "aUser", "aPass"]) store.set(k, $(k).value.trim());
+  store.set("dev", $("aDev").value.trim());
+  msg("Mentve, csatlakozás…");
+  mqttStart();
+};
+
+/* ---- parancsküldés ---- */
+async function send(cmd, bleOnly = false) {
+  if (ble.dev && ble.dev.gatt.connected && ble.cmd) {
+    await gatt(() => ble.cmd.writeValueWithResponse(enc.encode(cmd)));
+    return true;
+  }
+  if (!bleOnly && mq && mq.connected) {
+    mq.publish("q3rf/" + store.get("dev") + "/cmd", cmd, { qos: 1 });
+    return true;
+  }
+  msg(bleOnly ? "Ehhez Bluetooth-kapcsolat kell." : "Nincs kapcsolat a termosztáttal.");
+  return false;
+}
+function spStep(d) {
+  if (!state || state.sp === null) return;
+  const cur = spPending ?? Number(state.sp);
+  spPending = Math.min(28, Math.max(18, Math.round((cur + d) * 2) / 2));
+  render();
+  clearTimeout(spTimer);
+  spTimer = setTimeout(async () => {
+    spTimer = null;
+    const v = spPending;
+    msg("Küldés: " + v.toFixed(1) + " °C");
+    if (!(await send("SP=" + v.toFixed(1)).catch(e => { msg("Hiba: " + e.message); return false; }))) spPending = null;
+    render();
+  }, 1200);
+}
+$("spUp").onclick = () => spStep(+0.5);
+$("spDn").onclick = () => spStep(-0.5);
+$("pairBtn").onclick = async () => {
+  if (!confirm("A vevőn villog már zölden a LED (M/A gomb)?")) return;
+  if (await send("PAIR")) msg("Párosítás elküldve");
+};
+$("wSend").onclick = async () => {
+  if (!$("wSsid").value) { msg("Add meg a hálózat nevét."); return; }
+  if (await send("WIFI=" + $("wSsid").value + "\t" + $("wPass").value, true)) { msg("WiFi elküldve"); $("wPass").value = ""; }
+};
+let brokerTouched = false;
+function brokerSel() { return document.querySelector("input[name=broker]:checked").value; }
+function brokerUi() {
+  const ha = brokerSel() === "ha";
+  $("grpHivemq").hidden = ha; $("grpHa").hidden = !ha;
+  $("brokerHint").textContent = ha
+    ? "Helyi Home Assistant (Mosquitto bővítmény + MQTT integráció). A termosztát magától megjelenik a HA eszközei között. Távolról ilyenkor a Home Assistanton át éred el; ez az app csak Bluetooth-on."
+    : "Felhős HiveMQ szerver: ez az app az interneten át is eléri a termosztátot (Távoli elérés rész).";
+}
+document.querySelectorAll("input[name=broker]").forEach(r => r.onchange = () => { brokerTouched = true; brokerUi(); });
+brokerUi();
+$("mSend").onclick = async () => {
+  const ha = brokerSel() === "ha";
+  const host = (ha ? $("hHost") : $("mHost")).value.trim();
+  const port = (ha ? $("hPort") : $("mPort")).value.trim() || (ha ? "1883" : "8883");
+  const user = (ha ? $("hUser") : $("mUser")).value.trim();
+  const pass = (ha ? $("hPass") : $("mPass")).value;
+  if (!host) { msg("Add meg a szerver címét."); return; }
+  /* a szerver adatait csak akkor küldjük újra, ha változtak (különben a tárolt jelszó törlődne) */
+  const s = state || {};
+  const changed = pass || host !== (ha ? s.hhost : s.mhost) || user !== (ha ? s.huser : s.muser)
+                  || port !== String(ha ? s.hport : s.mport);
+  if (changed) {
+    if (!pass && user && !confirm("Jelszó nélkül mented a szerver adatait?")) return;
+    if (!(await send((ha ? "HA=" : "MQTT=") + [host, port, user, pass].join("\t"), true))) return;
+  }
+  if (await send("BROKER=" + (ha ? "HA" : "HIVEMQ"), true)) {
+    msg(ha ? "Home Assistant bekapcsolva" : "HiveMQ bekapcsolva");
+    $("mPass").value = ""; $("hPass").value = "";
+    brokerTouched = false;
+  }
+};
+$("pinSend").onclick = async () => {
+  const p = $("pinNew").value.trim();
+  if (!/^\d{6}$/.test(p)) { msg("A PIN 6 számjegy legyen."); return; }
+  if (!confirm("Biztosan módosítod a PIN-t? A termosztát újraindul.")) return;
+  await send("PIN=" + p, true).catch(() => {});
+  msg("PIN elküldve – felejtsd el az eszközt a Bluetooth-beállításokban, majd csatlakozz újra.");
+};
+
+/* ---- indulás ---- */
+render();
+mqttStart();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
